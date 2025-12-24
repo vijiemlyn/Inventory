@@ -123,12 +123,32 @@
             letter-spacing: 2px;
             text-transform: uppercase;
         }
+        /* Add this to the bottom of your <style> section */
+#sync-status {
+    font-size: 0.7rem;
+    color: var(--text-dim);
+    letter-spacing: 1px;
+    margin-top: 5px;
+    display: block;
+    text-transform: uppercase;
+}
+.syncing { 
+    color: var(--accent-green) !important; 
+    font-weight: bold; 
+    animation: pulse 1.5s infinite;
+}
+@keyframes pulse {
+    0% { opacity: 1; }
+    50% { opacity: 0.5; }
+    100% { opacity: 1; }
+}
     </style>
 </head>
 <body>
 
 <header>
     <h1>DevStore Inventory</h1>
+    <div id="sync-status">System Ready</div>
 </header>
 
 <div id="inventory-list">
@@ -136,6 +156,7 @@
 </div>
 
 <script>
+    let isSyncing = false;
     // PASTE YOUR URL BELOW
     const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbx9IiTnG_5TkVbMSI3niFEh1uuXfcOqDUaXenkQkW0jTKfLEgOW53hy0M-6YMJUzVon/exec";
 
@@ -171,25 +192,49 @@
         });
     }
 
-    async function changeStock(id, amount) {
-        const display = document.getElementById(`count-${id}`);
-        let currentCount = parseInt(display.innerText);
-        let newCount = currentCount + amount;
-        
-        // Instant Feedback
-        display.innerText = newCount;
+async function changeStock(id, amount) {
+    const display = document.getElementById(`count-${id}`);
+    const status = document.getElementById('sync-status');
+    
+    let currentCount = parseInt(display.innerText);
+    let newCount = currentCount + amount;
+    
+    // 1. Update UI instantly
+    display.innerText = newCount;
 
-        // Cloud Update
-        try {
-            await fetch(SCRIPT_URL, {
-                method: 'POST',
-                mode: 'no-cors',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ id: id, newStock: newCount })
-            });
-        } catch (e) {
-            console.error("Sync failed", e);
-        }
+    // 2. Set Syncing State
+    status.innerText = "Syncing to Cloud...";
+    status.classList.add('syncing');
+    isSyncing = true;
+
+    try {
+        // 3. Send to Google Sheets
+        await fetch(SCRIPT_URL, {
+            method: 'POST',
+            mode: 'no-cors', 
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id: id, newStock: newCount })
+        });
+
+        // 4. Wait for Google to finish processing
+        // We use 3 seconds because Google Sheets is a bit slow to 'write'
+        setTimeout(() => {
+            status.innerText = "Data Saved Successfully";
+            status.classList.remove('syncing');
+            isSyncing = false;
+        }, 3000);
+
+    } catch (e) {
+        status.innerText = "Sync Failed!";
+        status.style.color = "red";
+        isSyncing = false;
+    }
+}
+
+// Prevents you from accidentally closing the app while it's saving
+window.onbeforeunload = function() {
+    if (isSyncing) return "Changes are still saving to Google Sheets!";
+};
     }
 
     fetchInventory();
